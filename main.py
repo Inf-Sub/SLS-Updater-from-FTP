@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '0.1.0'
+__version__ = '1.0.0'
 
 
 import ftplib
@@ -29,9 +29,9 @@ load_dotenv()
 ftp_host = os.getenv('FTP_HOST')
 ftp_user = os.getenv('FTP_USER')
 ftp_password = os.getenv('FTP_PASSWORD')
-remote_base_path = os.getenv('REMOTE_BASE_PATH')
+remote_base_path = os.getenv('REMOTE_BASE_PATH', '')
 remote_paths = os.getenv('REMOTE_PATHS').split(';')
-local_base_path = os.getenv('LOCAL_BASE_PATHS')
+local_base_path = os.getenv('LOCAL_BASE_PATH', '')
 local_paths = os.getenv('LOCAL_PATHS').split(';')
 
 # Параметры Git
@@ -88,20 +88,46 @@ def synchronize_files():
         for remote_path, local_path in zip(remote_paths, local_paths):
             remote_path = remote_base_path + remote_path
             local_path = local_base_path + local_path
-            resp = ftp.sendcmd('MDTM ' + remote_path)
-            remote_mtime = datetime.strptime(resp[4:], "%Y%m%d%H%M%S")
-            local_mtime = datetime.fromtimestamp(os.path.getmtime(local_path))
 
-            if local_mtime < remote_mtime:
-                current_time = datetime.now().strftime('%Y.%m.%d-%H.%M')
-                file_extension = local_path.split('.')[-1]
-                base_name = local_path.rsplit('.', 1)[0]
-                new_file_name = f"{base_name}_{current_time}.{file_extension}"
+            # Проверяем, существует ли локальная директория, и создаем ее при необходимости
+            local_dir = os.path.dirname(local_path)
+            if not os.path.exists(local_dir):
+                os.makedirs(local_dir)
+                logging.info(f"Создана директория: {local_dir}")
 
-                shutil.copy(local_path, new_file_name)
-                logging.info(f"Бэкап файла '{local_path}' создан с именем '{new_file_name}'.")
+            # Проверяем, существует ли локальный файл
+            if not os.path.isfile(local_path):
+                logging.info(f"Локальный файл {local_path} не найден. Начинаем копирование с FTP...")
+                with open(local_path, 'wb') as local_file:
+                    def callback(data):
+                        local_file.write(data)
+
+                    ftp.retrbinary(f'RETR {remote_path}', callback)
+                logging.info(f"Файл {local_path} успешно скопирован с FTP.")
             else:
-                logging.info(f"Локальный файл {local_path} новее или файлы одинаковые. Обновление не требуется.")
+                # Если файл существует, сравниваем время модификации
+                resp = ftp.sendcmd('MDTM ' + remote_path)
+                remote_mtime = datetime.strptime(resp[4:], "%Y%m%d%H%M%S")
+                local_mtime = datetime.fromtimestamp(os.path.getmtime(local_path))
+
+                if local_mtime < remote_mtime:
+                    current_time = datetime.now().strftime('%Y.%m.%d-%H.%M')
+                    file_extension = local_path.split('.')[-1]
+                    base_name = local_path.rsplit('.', 1)[0]
+                    new_file_name = f"{base_name}_{current_time}.{file_extension}"
+
+                    shutil.copy(local_path, new_file_name)
+                    logging.info(f"Бэкап файла '{local_path}' создан с именем '{new_file_name}'.")
+
+                    # Обновляем файл с FTP
+                    with open(local_path, 'wb') as local_file:
+                        def callback(data):
+                            local_file.write(data)
+
+                        ftp.retrbinary(f'RETR {remote_path}', callback)
+                    logging.info(f"Файл {local_path} обновлен с FTP.")
+                else:
+                    logging.info(f"Локальный файл {local_path} новее или файлы одинаковые. Обновление не требуется.")
     except ftplib.all_errors as e:
         logging.error(f"Ошибка FTP: {e}")
     except Exception as e:
