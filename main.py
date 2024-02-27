@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '1.3.3'
+__version__ = '1.4.0'
 
 
 from ftplib import FTP, all_errors
@@ -76,8 +76,7 @@ def check_for_updates():
 def activate_venv_and_restart():
     activate_script = os.path.join(VENV_DIR, 'Scripts', 'activate.bat')
     python_exec = os.path.join(VENV_DIR, 'Scripts', 'pythonw.exe')
-    print(f'cmd.exe /k "{activate_script}" && "{python_exec} {" ".join(sys.argv)}"')
-    command = f'cmd.exe /k "{activate_script}" && "{python_exec} {" ".join(sys.argv)}"'
+    command = f'cmd.exe /k ""{activate_script}" && "{python_exec}" "{" ".join(sys.argv)}""'
     os.system(command)
     exit(0)
 
