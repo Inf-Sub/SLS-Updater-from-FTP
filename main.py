@@ -7,16 +7,17 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '1.1.0'
+__version__ = '1.3.0'
 
 
-import ftplib
+from ftplib import FTP, all_errors
 from datetime import datetime
 import os
 import logging
 import shutil
 import subprocess
 import sys
+import winreg
 from dotenv import load_dotenv
 
 # Настройка логирования
@@ -33,12 +34,20 @@ remote_base_path = os.getenv('REMOTE_BASE_PATH', '')
 remote_paths = os.getenv('REMOTE_PATHS').split(';')
 local_base_path = os.getenv('LOCAL_BASE_PATH', '')
 local_paths = os.getenv('LOCAL_PATHS').split(';')
+backup_path = os.getenv('BACKUP_PATH')
 
 # Параметры Git
 # Путь к локальной директории, где хранится скрипт
 LOCAL_REPO_DIR = os.path.dirname(os.path.realpath(__file__))
 # Путь к директории виртуального окружения
 VENV_DIR = os.path.join(LOCAL_REPO_DIR, 'venv')
+# Реестр
+REGISTRY_PATH = r'SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+REGISTRY_KEY = 'SLS-Updater-from-FTP'
+
+
+def ln() -> str:
+    return f'\n{"=" * 30}'
 
 
 def check_for_updates():
@@ -56,17 +65,45 @@ def check_for_updates():
             activate_venv_and_restart()
         else:
             print('Ветка уже обновлена.')
+
+        print(f'{ln()}')
+
     except subprocess.CalledProcessError as e:
-        print(f'Ошибка при проверке обновлений: {e}\nВывод: {e.output.decode()}')
+        print(f'Ошибка при проверке обновлений: {e}{ln()}Вывод: {e.output.decode()}{ln()}')
         exit(1)
 
 
 def activate_venv_and_restart():
     activate_script = os.path.join(VENV_DIR, 'Scripts', 'activate.bat')
-    python_exec = os.path.join(VENV_DIR, 'Scripts', 'python.exe')
+    python_exec = os.path.join(VENV_DIR, 'Scripts', 'pythonw.exe')
     command = f'cmd.exe /k "{activate_script} && {python_exec} {" ".join(sys.argv)}"'
     os.system(command)
     exit(0)
+
+
+def add_to_registry() -> None:
+    python_path = os.path.abspath(sys.executable)
+
+    # hide mode
+    python_path = python_path.replace('python.exe', 'pythonw.exe')
+
+    print(f'Python path: {python_path}')
+    print(f'Script path: {LOCAL_REPO_DIR}{ln()}')
+
+    key = winreg.OpenKey(
+        winreg.HKEY_CURRENT_USER,
+        REGISTRY_PATH,
+        0,
+        winreg.KEY_SET_VALUE)
+    winreg.SetValueEx(
+        key,
+        REGISTRY_KEY,
+        0,
+        winreg.REG_SZ,
+        f'{python_path} "{LOCAL_REPO_DIR}'
+        r'\main.py"'
+    )
+    key.Close()
 
 
 def synchronize_files():
@@ -79,64 +116,75 @@ def synchronize_files():
         return
 
     try:
-        ftp = ftplib.FTP(ftp_host, ftp_user, ftp_password)
-        logging.info("Успешное подключение к FTP")
+        # ftp = ftplib.FTP(ftp_host, ftp_user, ftp_password)
+        with FTP(ftp_host, ftp_user, ftp_password) as ftp:
+            print("Успешное подключение к FTP")
+    
+            for remote_path, local_path in zip(remote_paths, local_paths):
+                remote_path = remote_base_path + remote_path
+                local_path = local_base_path + local_path
+    
+                # Проверяем, существует ли локальная директория, и создаем ее при необходимости
+                local_dir = os.path.dirname(local_path)
+                if not os.path.exists(local_dir):
+                    os.makedirs(local_dir)
+                    print(f"Создана директория: {local_dir}")
 
-        for remote_path, local_path in zip(remote_paths, local_paths):
-            remote_path = remote_base_path + remote_path
-            local_path = local_base_path + local_path
-
-            # Проверяем, существует ли локальная директория, и создаем ее при необходимости
-            local_dir = os.path.dirname(local_path)
-            if not os.path.exists(local_dir):
-                os.makedirs(local_dir)
-                logging.info(f"Создана директория: {local_dir}")
-
-            # Проверяем, существует ли локальный файл
-            if not os.path.isfile(local_path):
-                logging.info(f"Локальный файл {local_path} не найден. Начинаем копирование с FTP...")
-                with open(local_path, 'wb') as local_file:
-                    def callback(data):
-                        local_file.write(data)
-
-                    ftp.retrbinary(f'RETR {remote_path}', callback)
-                logging.info(f"Файл {local_path} успешно скопирован с FTP.")
-            else:
-                # Если файл существует, сравниваем время модификации
-                resp = ftp.sendcmd('MDTM ' + remote_path)
-                remote_mtime = datetime.strptime(resp[4:], "%Y%m%d%H%M%S")
-                local_mtime = datetime.fromtimestamp(os.path.getmtime(local_path))
-
-                if local_mtime < remote_mtime:
-                    current_time = datetime.now().strftime('%Y.%m.%d-%H.%M')
-                    file_extension = local_path.split('.')[-1]
-                    base_name = local_path.rsplit('.', 1)[0]
-                    new_file_name = f"{base_name}_{current_time}.{file_extension}"
-
-                    shutil.copy(local_path, new_file_name)
-                    logging.info(f"Бэкап файла '{local_path}' создан с именем '{new_file_name}'.")
-
-                    # Обновляем файл с FTP
+                # Проверяем, существует ли локальная директория для бэкапа, и создаем ее при необходимости
+                local_backup_path = os.path.join(local_dir, backup_path)
+                local_backup_dir = os.path.dirname(local_backup_path)
+                if not os.path.exists(local_backup_dir):
+                    os.makedirs(local_backup_dir)
+                    print(f"Создана директория: {local_backup_dir}")
+    
+                # Проверяем, существует ли локальный файл
+                if not os.path.isfile(local_path):
+                    print(f"Локальный файл {local_path} не найден. Начинаем копирование с FTP...")
                     with open(local_path, 'wb') as local_file:
                         def callback(data):
                             local_file.write(data)
-
+    
                         ftp.retrbinary(f'RETR {remote_path}', callback)
-                    logging.info(f"Файл {local_path} обновлен с FTP.")
+                    print(f"Файл {local_path} успешно скопирован с FTP.")
                 else:
-                    logging.info(f"Локальный файл {local_path} новее или файлы одинаковые. Обновление не требуется.")
-    except ftplib.all_errors as e:
+                    # Если файл существует, сравниваем время модификации
+                    resp = ftp.sendcmd('MDTM ' + remote_path)
+                    remote_time = datetime.strptime(resp[4:], "%Y%m%d%H%M%S")
+                    local_time = datetime.fromtimestamp(os.path.getmtime(local_path))
+    
+                    if local_time < remote_time:
+                        current_time = datetime.now().strftime('%Y.%m.%d-%H.%M')
+                        file_extension = local_path.split('.')[-1]
+                        base_name = local_path.rsplit('.', 1)[0]
+                        new_file_name = f"{base_name}_{current_time}.{file_extension}"
+    
+                        shutil.copy(local_path, os.path.join(local_backup_dir, new_file_name))
+                        print(f"Бэкап файла '{local_path}' создан с именем '{new_file_name}'.")
+    
+                        # Обновляем файл с FTP
+                        with open(local_path, 'wb') as local_file:
+                            def callback(data):
+                                local_file.write(data)
+    
+                            ftp.retrbinary(f'RETR {remote_path}', callback)
+                        print(f"Файл {local_path} обновлен с FTP.")
+                    else:
+                        print(f"Локальный файл {local_path} новее или файлы одинаковые. Обновление не требуется.")
+    except all_errors as e:
         logging.error(f"Ошибка FTP: {e}")
     except Exception as e:
         logging.error(f"Непредвиденная ошибка: {e}")
-    finally:
-        try:
-            ftp.quit()
-        except:
-            pass
+    # finally:
+    #     try:
+    #         ftp.quit()
+    #     except:
+    #         pass
 
 
 def main():
+    # adding to autostart at user login
+    add_to_registry()
+    print(f'Adding to autostart at user login.{ln()}')
     print('Запуск основной части скрипта...')
     synchronize_files()
 
