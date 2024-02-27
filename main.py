@@ -7,10 +7,10 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '1.2.0'
+__version__ = '1.3.0'
 
 
-from ftplib import FTP
+from ftplib import FTP, all_errors
 from datetime import datetime
 import os
 import logging
@@ -121,9 +121,8 @@ def synchronize_files():
             print("Успешное подключение к FTP")
     
             for remote_path, local_path in zip(remote_paths, local_paths):
-                remote_path = os.path.join(remote_base_path, remote_path)
-                local_path = os.path.join(local_base_path, local_path)
-                local_backup_path = os.path.join(local_path, backup_path)
+                remote_path = remote_base_path + remote_path
+                local_path = local_base_path + local_path
     
                 # Проверяем, существует ли локальная директория, и создаем ее при необходимости
                 local_dir = os.path.dirname(local_path)
@@ -132,6 +131,7 @@ def synchronize_files():
                     print(f"Создана директория: {local_dir}")
 
                 # Проверяем, существует ли локальная директория для бэкапа, и создаем ее при необходимости
+                local_backup_path = os.path.join(local_dir, backup_path)
                 local_backup_dir = os.path.dirname(local_backup_path)
                 if not os.path.exists(local_backup_dir):
                     os.makedirs(local_backup_dir)
@@ -170,21 +170,21 @@ def synchronize_files():
                         print(f"Файл {local_path} обновлен с FTP.")
                     else:
                         print(f"Локальный файл {local_path} новее или файлы одинаковые. Обновление не требуется.")
-    except ftplib.all_errors as e:
+    except all_errors as e:
         logging.error(f"Ошибка FTP: {e}")
     except Exception as e:
         logging.error(f"Непредвиденная ошибка: {e}")
-    finally:
-        try:
-            ftp.quit()
-        except:
-            pass
+    # finally:
+    #     try:
+    #         ftp.quit()
+    #     except:
+    #         pass
 
 
 def main():
     # adding to autostart at user login
     add_to_registry()
-    logging.info(f'Adding to autostart at user login.{ln()}')
+    print(f'Adding to autostart at user login.{ln()}')
     print('Запуск основной части скрипта...')
     synchronize_files()
 
