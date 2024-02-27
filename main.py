@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 
 
 import ftplib
@@ -35,14 +35,9 @@ local_base_path = os.getenv('LOCAL_BASE_PATH', '')
 local_paths = os.getenv('LOCAL_PATHS').split(';')
 
 # Параметры Git
-# URL вашего репозитория на GitHub
-# REPO_URL = 'https://github.com/username/repo.git'
-REPO_URL = 'https://github.com/ADmin-TkYD/SLS-Updater-from-FTP.git'
 # Путь к локальной директории, где хранится скрипт
-# LOCAL_REPO_DIR = r'C:\path\to\your\script'
 LOCAL_REPO_DIR = os.path.dirname(os.path.realpath(__file__))
 # Путь к директории виртуального окружения
-# VENV_DIR = 'C:\\path\\to\\your\\venv'
 VENV_DIR = os.path.join(LOCAL_REPO_DIR, 'venv')
 
 
@@ -56,11 +51,13 @@ def check_for_updates():
         )
         if 'Your branch is up to date' not in status.stdout:
             print('Обнаружены обновления. Обновляемся...')
-            subprocess.run(['git', 'pull'], cwd=LOCAL_REPO_DIR, check=True)
+            subprocess.run(['git', 'pull'], cwd=LOCAL_REPO_DIR, check=True, capture_output=True, text=True)
             print('Обновление завершено. Перезапуск...')
             activate_venv_and_restart()
+        else:
+            print('Ветка уже обновлена.')
     except subprocess.CalledProcessError as e:
-        print(f'Ошибка при проверке обновлений: {e}')
+        print(f'Ошибка при проверке обновлений: {e}\nВывод: {e.output.decode()}')
         exit(1)
 
 
