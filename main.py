@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '1.3.0'
+__version__ = '1.3.1'
 
 
 from ftplib import FTP, all_errors
@@ -34,7 +34,7 @@ remote_base_path = os.getenv('REMOTE_BASE_PATH', '')
 remote_paths = os.getenv('REMOTE_PATHS').split(';')
 local_base_path = os.getenv('LOCAL_BASE_PATH', '')
 local_paths = os.getenv('LOCAL_PATHS').split(';')
-backup_path = os.getenv('BACKUP_PATH')
+backup_path = os.getenv('BACKUP_PATH', '')
 
 # Параметры Git
 # Путь к локальной директории, где хранится скрипт
