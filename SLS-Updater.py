@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '2.0.0'
+__version__ = '2.0.1'
 
 import sys
 import os
@@ -52,8 +52,8 @@ def install_requirements(venv_python):
     subprocess.check_call([venv_python, "-m", "pip", "install", "-r", "requirements.txt"])
 
 
-def ln() -> str:
-    return f'\n{"=" * 30}'
+def ln(num: int = 30) -> str:
+    return f'\n{"=" * num}'
 
 
 def check_for_updates() -> None:
@@ -112,7 +112,7 @@ def add_to_registry() -> None:
     key.Close()
 
 
-def copy_file_from_ftp(ftp, remote_path, local_path):
+def copy_file_from_ftp(ftp, remote_path, local_path) -> None:
     with open(local_path, 'wb') as local_file:
         """
         Открываем локальный файл в режиме записи байтов (binary write mode). Если файл с указанным local_path уже 
@@ -136,7 +136,7 @@ def check_exist_dir(local_dir) -> None:
         print(f"Создана директория: {local_dir}")
 
 
-def check_file_exists_on_ftp(ftp, filepath):
+def check_file_exists_on_ftp(ftp, filepath) -> bool:
     """
     Check if the given file exists on the FTP server.
 
@@ -202,13 +202,6 @@ def synchronize_files(params: dict) -> None:
                 if not os.path.isfile(local_path):
                     print(f"Локальный файл {local_path} не найден. Начинаем копирование с FTP...")
                     copy_file_from_ftp(ftp, remote_path, local_path)
-                    """
-                    with open(local_path, 'wb') as local_file:
-                        def callback(data):
-                            local_file.write(data)
-
-                        ftp.retrbinary(f'RETR {remote_path}', callback)
-                    """
                     print(f"Файл {local_path} успешно скопирован с FTP.")
                 else:
                     # Если файл существует, сравниваем время модификации
@@ -227,13 +220,6 @@ def synchronize_files(params: dict) -> None:
     
                         # Обновляем файл с FTP
                         copy_file_from_ftp(ftp, remote_path, local_path)
-                        """
-                        with open(local_path, 'wb') as local_file:
-                            def callback(data):
-                                local_file.write(data)
-    
-                            ftp.retrbinary(f'RETR {remote_path}', callback)
-                        """
                         print(f"Файл {local_path} обновлен с FTP.")
                     else:
                         print(f"Локальный файл {local_path} новее или файлы одинаковые. Обновление не требуется.")
@@ -248,7 +234,7 @@ def synchronize_files(params: dict) -> None:
     #         pass
 
 
-def main() -> dict:
+def run() -> None:
     params = {}
     if not is_venv():
         print("Not running in a virtual environment.")
@@ -292,17 +278,12 @@ def main() -> dict:
     params['local_paths'] = os.getenv('LOCAL_PATHS').split(';')
     params['backup_path'] = os.getenv('BACKUP_PATH', '')
 
-    return params
-
-
-def run():
-    env_params = main()
     check_for_updates()
     # adding to autostart at user login
     add_to_registry()
     print(f'Adding to autostart at user login.{ln()}')
     print('Запуск основной части скрипта...')
-    synchronize_files(env_params)
+    synchronize_files(params)
 
 
 if __name__ == '__main__':
