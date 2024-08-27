@@ -2,12 +2,12 @@
 __author__ = 'InfSub'
 __contact__ = 'ADmin@TkYD.ru'
 __copyright__ = 'Copyright (C) 2024, [LegioNTeaM] InfSub'
-__date__ = '2024/02/27'
+__date__ = '2024/08/23'
 __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '1.4.0'
+__version__ = '1.5.0'
 
 
 from ftplib import FTP, all_errors
@@ -106,7 +106,21 @@ def add_to_registry() -> None:
     key.Close()
 
 
-def synchronize_files():
+def copy_file_from_ftp(ftp, remote_path, local_path):
+    with open(local_path, 'wb') as local_file:
+        def callback(data):
+            local_file.write(data)
+
+    ftp.retrbinary(f'RETR {remote_path}', callback)
+
+
+def check_exist_dir(local_dir) -> None:
+    if not os.path.exists(local_dir):
+        os.makedirs(local_dir)
+        print(f"Создана директория: {local_dir}")
+
+
+def synchronize_files() -> None:
     if not all([ftp_host, ftp_user, ftp_password, remote_paths, local_paths]):
         logging.error("Не все переменные окружения заданы.")
         return
@@ -116,7 +130,6 @@ def synchronize_files():
         return
 
     try:
-        # ftp = ftplib.FTP(ftp_host, ftp_user, ftp_password)
         with FTP(ftp_host, ftp_user, ftp_password) as ftp:
             print("Успешное подключение к FTP")
     
@@ -126,25 +139,24 @@ def synchronize_files():
     
                 # Проверяем, существует ли локальная директория, и создаем ее при необходимости
                 local_dir = os.path.dirname(local_path)
-                if not os.path.exists(local_dir):
-                    os.makedirs(local_dir)
-                    print(f"Создана директория: {local_dir}")
+                check_exist_dir(local_dir)
 
                 # Проверяем, существует ли локальная директория для бэкапа, и создаем ее при необходимости
                 local_backup_path = os.path.join(local_dir, backup_path)
                 local_backup_dir = os.path.dirname(local_backup_path)
-                if not os.path.exists(local_backup_dir):
-                    os.makedirs(local_backup_dir)
-                    print(f"Создана директория: {local_backup_dir}")
+                check_exist_dir(local_backup_dir)
     
                 # Проверяем, существует ли локальный файл
                 if not os.path.isfile(local_path):
                     print(f"Локальный файл {local_path} не найден. Начинаем копирование с FTP...")
+                    copy_file_from_ftp(ftp, remote_path, local_path)
+                    """
                     with open(local_path, 'wb') as local_file:
                         def callback(data):
                             local_file.write(data)
-    
+
                         ftp.retrbinary(f'RETR {remote_path}', callback)
+                    """
                     print(f"Файл {local_path} успешно скопирован с FTP.")
                 else:
                     # Если файл существует, сравниваем время модификации
@@ -162,11 +174,14 @@ def synchronize_files():
                         print(f"Бэкап файла '{local_path}' создан с именем '{new_file_name}'.")
     
                         # Обновляем файл с FTP
+                        copy_file_from_ftp(ftp, remote_path, local_path)
+                        """
                         with open(local_path, 'wb') as local_file:
                             def callback(data):
                                 local_file.write(data)
     
                             ftp.retrbinary(f'RETR {remote_path}', callback)
+                        """
                         print(f"Файл {local_path} обновлен с FTP.")
                     else:
                         print(f"Локальный файл {local_path} новее или файлы одинаковые. Обновление не требуется.")
