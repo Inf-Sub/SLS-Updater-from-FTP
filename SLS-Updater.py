@@ -2,39 +2,27 @@
 __author__ = 'InfSub'
 __contact__ = 'ADmin@TkYD.ru'
 __copyright__ = 'Copyright (C) 2024, [LegioNTeaM] InfSub'
-__date__ = '2024/08/23'
+__date__ = '2024/08/27'
 __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '1.5.0'
+__version__ = '2.0.0'
 
-
+import sys
+import os
+import subprocess
+from pathlib import Path
+import logging
 from ftplib import FTP, all_errors
 from datetime import datetime
-import os
-import logging
 import shutil
-import subprocess
-import sys
 import winreg
-from dotenv import load_dotenv
+
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 
-# Загрузка переменных окружения из файла .env
-load_dotenv()
-
-# Параметры FTP
-ftp_host = os.getenv('FTP_HOST')
-ftp_user = os.getenv('FTP_USER')
-ftp_password = os.getenv('FTP_PASSWORD')
-remote_base_path = os.getenv('REMOTE_BASE_PATH', '')
-remote_paths = os.getenv('REMOTE_PATHS').split(';')
-local_base_path = os.getenv('LOCAL_BASE_PATH', '')
-local_paths = os.getenv('LOCAL_PATHS').split(';')
-backup_path = os.getenv('BACKUP_PATH', '')
 
 # Параметры Git
 # Путь к локальной директории, где хранится скрипт
@@ -46,11 +34,29 @@ REGISTRY_PATH = r'SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
 REGISTRY_KEY = 'SLS-Updater-from-FTP'
 
 
+def is_venv():
+    return (hasattr(sys, 'real_prefix') or
+            (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
+
+
+def create_venv():
+    venv_dir = Path("venv")
+    print("Creating virtual environment...")
+    subprocess.check_call([sys.executable, "-m", "venv", str(venv_dir)])
+    print(type(venv_dir))
+    return venv_dir
+
+
+def install_requirements(venv_python):
+    print("Installing requirements...")
+    subprocess.check_call([venv_python, "-m", "pip", "install", "-r", "requirements.txt"])
+
+
 def ln() -> str:
     return f'\n{"=" * 30}'
 
 
-def check_for_updates():
+def check_for_updates() -> None:
     try:
         subprocess.run(
             ['git', 'fetch'], cwd=LOCAL_REPO_DIR, check=True, capture_output=True, text=True
@@ -73,7 +79,7 @@ def check_for_updates():
         exit(1)
 
 
-def activate_venv_and_restart():
+def activate_venv_and_restart() -> None:
     activate_script = os.path.join(VENV_DIR, 'Scripts', 'activate.bat')
     python_exec = os.path.join(VENV_DIR, 'Scripts', 'pythonw.exe')
     command = f'cmd.exe /k ""{activate_script}" && "{python_exec}" "{" ".join(sys.argv)}""'
@@ -108,10 +114,20 @@ def add_to_registry() -> None:
 
 def copy_file_from_ftp(ftp, remote_path, local_path):
     with open(local_path, 'wb') as local_file:
+        """
+        Открываем локальный файл в режиме записи байтов (binary write mode). Если файл с указанным local_path уже 
+        существует, он будет перезаписан. Если файла нет, он будет создан.
+        """
         def callback(data):
+            """
+            Внутри блока with определяется функция callback, которая принимает один параметр data. Эта функция будет
+            использоваться для записи данных, полученных от FTP-сервера, в локальный файл. Всякий раз, когда FTP-сервер
+            отправляет очередной блок данных, callback вызывается и записывает эти данные в local_file.
+            """
             local_file.write(data)
 
-    ftp.retrbinary(f'RETR {remote_path}', callback)
+    if check_file_exists_on_ftp(ftp, remote_path):
+        ftp.retrbinary(f'RETR {remote_path}', callback)
 
 
 def check_exist_dir(local_dir) -> None:
@@ -120,29 +136,65 @@ def check_exist_dir(local_dir) -> None:
         print(f"Создана директория: {local_dir}")
 
 
-def synchronize_files() -> None:
-    if not all([ftp_host, ftp_user, ftp_password, remote_paths, local_paths]):
+def check_file_exists_on_ftp(ftp, filepath):
+    """
+    Check if the given file exists on the FTP server.
+
+    :param ftp: FTP connection object
+    :param filepath: Path to the file to check
+    :return: True if the file exists, False otherwise
+    """
+    file_found = False
+
+    def file_check_callback(line):
+        nonlocal file_found
+        parts = line.split()
+        file_name = parts[-1]
+        if file_name == filepath:
+            file_found = True
+
+    try:
+        ftp.retrlines('LIST', file_check_callback)
+    except Exception as e:
+        logging.error(f'Ошибка при получении списка файлов: {e}')
+        return False
+
+    if file_found:
+        msg = f'Файл: {filepath} - найден на FTP.'
+        print(msg)
+        return True
+    else:
+        msg = f'Файл: {filepath} - не найден на FTP.'
+        logging.error(msg)
+        print(msg)
+        return False
+
+
+def synchronize_files(params: dict) -> None:
+    if not all([
+        params['ftp_host'], params['ftp_user'], params['ftp_password'], params['remote_paths'], params['local_paths']
+    ]):
         logging.error("Не все переменные окружения заданы.")
         return
 
-    if len(remote_paths) != len(local_paths):
+    if len(params['remote_paths']) != len(params['local_paths']):
         logging.error("Количество локальных и удаленных путей не совпадает.")
         return
 
     try:
-        with FTP(ftp_host, ftp_user, ftp_password) as ftp:
+        with FTP(params['ftp_host'], params['ftp_user'], params['ftp_password']) as ftp:
             print("Успешное подключение к FTP")
     
-            for remote_path, local_path in zip(remote_paths, local_paths):
-                remote_path = remote_base_path + remote_path
-                local_path = local_base_path + local_path
+            for remote_path, local_path in zip(params['remote_paths'], params['local_paths']):
+                remote_path = params['remote_base_path'] + remote_path
+                local_path = params['local_base_path'] + local_path
     
                 # Проверяем, существует ли локальная директория, и создаем ее при необходимости
                 local_dir = os.path.dirname(local_path)
                 check_exist_dir(local_dir)
 
                 # Проверяем, существует ли локальная директория для бэкапа, и создаем ее при необходимости
-                local_backup_path = os.path.join(local_dir, backup_path)
+                local_backup_path = os.path.join(local_dir, params['backup_path'])
                 local_backup_dir = os.path.dirname(local_backup_path)
                 check_exist_dir(local_backup_dir)
     
@@ -196,14 +248,62 @@ def synchronize_files() -> None:
     #         pass
 
 
-def main():
+def main() -> dict:
+    params = {}
+    if not is_venv():
+        print("Not running in a virtual environment.")
+        venv_dir = Path("venv")
+
+        if not venv_dir.is_dir():
+            venv_dir = create_venv()
+
+        venv_python = venv_dir / "Scripts" / "python.exe"
+
+        install_requirements(venv_python)
+
+        print(f"Restarting script using virtual environment: {venv_python}")
+        subprocess.check_call([str(venv_python), __file__])
+        sys.exit()
+    else:
+        print("Running in a virtual environment.")
+        try:
+            import dotenv
+        except ImportError:
+            install_requirements(sys.executable)
+            subprocess.check_call([sys.executable, __file__])
+            sys.exit()
+
+    # Начало вашего основного скрипта
+    from dotenv import load_dotenv
+
+    # Здесь идет основной код вашей программы
+    print("Все необходимые библиотеки установлены и скрипт выполнен в виртуальном окружении.")
+
+    # Загрузка переменных окружения из файла .env
+    load_dotenv()
+
+    # Параметры FTP
+    params['ftp_host'] = os.getenv('FTP_HOST')
+    params['ftp_user'] = os.getenv('FTP_USER')
+    params['ftp_password'] = os.getenv('FTP_PASSWORD')
+    params['remote_base_path'] = os.getenv('REMOTE_BASE_PATH', '')
+    params['remote_paths'] = os.getenv('REMOTE_PATHS').split(';')
+    params['local_base_path'] = os.getenv('LOCAL_BASE_PATH', '')
+    params['local_paths'] = os.getenv('LOCAL_PATHS').split(';')
+    params['backup_path'] = os.getenv('BACKUP_PATH', '')
+
+    return params
+
+
+def run():
+    env_params = main()
+    check_for_updates()
     # adding to autostart at user login
     add_to_registry()
     print(f'Adding to autostart at user login.{ln()}')
     print('Запуск основной части скрипта...')
-    synchronize_files()
+    synchronize_files(env_params)
 
 
 if __name__ == '__main__':
-    check_for_updates()
-    main()
+    run()
