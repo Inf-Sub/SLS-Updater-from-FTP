@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '2.1.6'
+__version__ = '2.1.7'
 
 
 import sys
@@ -81,7 +81,7 @@ def add_to_registry() -> None:
     python_path = python_path.replace('python.exe', 'pythonw.exe')
 
     logger.debug(f'Python path: {python_path}')
-    logger.debug(f'Script path: {LOCAL_REPO_DIR}{ln()}')
+    logger.debug(f'Script path: {LOCAL_REPO_DIR}')
 
     key = winreg.OpenKey(
         winreg.HKEY_CURRENT_USER,
@@ -97,6 +97,7 @@ def add_to_registry() -> None:
         r'\main.py"'
     )
     key.Close()
+    logger.info(f'Adding to autostart at user login.{ln()}')
 
 
 def check_exist_dir(directory: str) -> None:
@@ -142,11 +143,11 @@ def synchronize_files(params: dict) -> None:
     required_keys = ['ftp_host', 'ftp_user', 'ftp_password', 'remote_paths', 'local_paths', 'remote_base_path',
                      'local_base_path', 'backup_path']
     if not all(params.get(key) for key in required_keys):
-        logger.error('Error: Не все необходимые параметры переданы.')
+        logger.critical('Error: Не все необходимые параметры переданы.')
         return
 
     if len(params['remote_paths']) != len(params['local_paths']):
-        logger.error('Error: Количество локальных и удаленных путей не совпадает.')
+        logger.critical('Error: Количество локальных и удаленных путей не совпадает.')
         return
 
     try:
@@ -234,15 +235,19 @@ def run() -> None:
     params['ftp_user'] = os.getenv('FTP_USER')
     params['ftp_password'] = os.getenv('FTP_PASSWORD')
     params['remote_base_path'] = os.getenv('REMOTE_BASE_PATH', '')
-    params['remote_paths'] = os.getenv('REMOTE_PATHS').split(';')
+    params['remote_paths'] = os.getenv('REMOTE_PATHS')
     params['local_base_path'] = os.getenv('LOCAL_BASE_PATH', '')
-    params['local_paths'] = os.getenv('LOCAL_PATHS').split(';')
+    params['local_paths'] = os.getenv('LOCAL_PATHS')
     params['backup_path'] = os.getenv('BACKUP_PATH', '')
+
+    if params['remote_paths'] is not None:
+        params['remote_paths'] = params['remote_paths'].split(';')
+    if params['local_paths'] is not None:
+        params['local_paths'] = params['local_paths'].split(';')
 
     check_for_updates()
     # adding to autostart at user login
     add_to_registry()
-    logger.info(f'Adding to autostart at user login.{ln()}')
     synchronize_files(params)
 
 
