@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '2.1.7'
+__version__ = '2.1.8'
 
 
 import sys
@@ -104,7 +104,7 @@ def check_exist_dir(directory: str) -> None:
     """Проверяет наличие каталога и создает его при необходимости."""
     if not os.path.exists(directory):
         os.makedirs(directory)
-        if logger is not None:
+        if 'logger' in globals() and logger is not None:
             logger.info(f'Создана директория: {directory}')
 
 
