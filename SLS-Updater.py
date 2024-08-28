@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '2.2.0'
+__version__ = '2.2.1'
 
 import sys
 import os
@@ -227,7 +227,8 @@ def run() -> None:
             subprocess.check_call([sys.executable, __file__])
             sys.exit()
 
-    # Здесь идет основной код вашей программы
+    from dotenv import load_dotenv
+
     logger.info('Все необходимые библиотеки установлены и скрипт выполнен в виртуальном окружении.')
 
     # Загрузка переменных окружения из файла .env
