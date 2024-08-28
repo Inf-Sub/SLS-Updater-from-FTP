@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '2.2.1'
+__version__ = '2.2.2'
 
 import sys
 import os
@@ -17,7 +17,6 @@ from ftplib import FTP, all_errors
 import shutil
 import winreg
 import posixpath
-from dotenv import load_dotenv
 
 import logging
 from logging.handlers import TimedRotatingFileHandler
