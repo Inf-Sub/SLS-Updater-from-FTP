@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '2.1.8'
+__version__ = '2.2.0'
 
 
 import sys
@@ -17,6 +17,8 @@ from pathlib import Path
 from ftplib import FTP, all_errors
 import shutil
 import winreg
+import posixpath
+from dotenv import load_dotenv
 
 import logging
 from logging.handlers import TimedRotatingFileHandler
@@ -155,7 +157,12 @@ def synchronize_files(params: dict) -> None:
             logger.info(f'Успешное подключение к FTP{ln()}')
 
             for remote_path, local_path in zip(params['remote_paths'], params['local_paths']):
-                remote_path = f'{os.path.join(params["remote_base_path"], remote_path)}'
+                # Функция os.path.join в Python автоматически использует символ пути, соответствующий операционной
+                # системе, на которой выполняется скрипт. В Windows это обратный слеш (\), а в Unix-подобных системах
+                # (например, Linux) это прямой слеш (/).
+                # Если вам требуется получать путь с использованием прямых слешей, то можно воспользоваться модулем
+                # posixpath, который предназначен для работы с путями в Unix-подобных системах.
+                remote_path = f'{posixpath.join(params["remote_base_path"], remote_path)}'
                 local_path = f'{os.path.join(params["local_base_path"], local_path)}'
                 local_dir = f'{os.path.dirname(local_path)}'
                 local_backup_dir = f'{os.path.join(local_dir, params["backup_path"])}'
@@ -220,9 +227,6 @@ def run() -> None:
             install_requirements(sys.executable)
             subprocess.check_call([sys.executable, __file__])
             sys.exit()
-
-    # Начало вашего основного скрипта
-    from dotenv import load_dotenv
 
     # Здесь идет основной код вашей программы
     logger.info('Все необходимые библиотеки установлены и скрипт выполнен в виртуальном окружении.')
