@@ -7,7 +7,7 @@ __deprecated__ = False
 __email__ = 'ADmin@TkYD.ru'
 __maintainer__ = 'InfSub'
 __status__ = 'Production'
-__version__ = '2.2.2'
+__version__ = '2.2.3'
 
 import sys
 import os
@@ -160,39 +160,38 @@ def synchronize_files(params: dict) -> None:
                 # (например, Linux) это прямой слеш (/).
                 # Если вам требуется получать путь с использованием прямых слешей, то можно воспользоваться модулем
                 # posixpath, который предназначен для работы с путями в Unix-подобных системах.
-                remote_path = f'{posixpath.join(params["remote_base_path"], remote_path)}'
-                local_path = f'{os.path.join(params["local_base_path"], local_path)}'
-                local_dir = f'{os.path.dirname(local_path)}'
-                local_backup_dir = f'{os.path.join(local_dir, params["backup_path"])}'
+                remote_path_full = f"{posixpath.join(params['remote_base_path'], remote_path)}"
+                local_path_full = f"{os.path.join(params['local_base_path'], local_path)}"
+                local_dir = os.path.dirname(local_path_full)
+                local_backup_dir = f"{os.path.join(local_dir, params['backup_path'])}"
 
                 check_exist_dir(local_dir)
                 check_exist_dir(local_backup_dir)
 
-                is_copy = False
+                if not check_file_exists_on_ftp(ftp, remote_path_full):
+                    continue
+
+                remote_time = datetime.strptime(ftp.sendcmd(f'MDTM {remote_path_full}')[4:], "%Y%m%d%H%M%S")
+                local_time = ''
 
                 # Проверяем, существует ли локальный файл
-                if not os.path.isfile(local_path):
-                    logger.info(f'Локальный файл {local_path} не найден.')
-                    is_copy = True
+                if os.path.isfile(local_path_full):
+                    local_time = datetime.fromtimestamp(os.path.getmtime(local_path_full)).replace(microsecond=0)
+
+                if local_time and local_time < remote_time:
+                    # current_time = datetime.now().strftime('%Y.%m.%d-%H.%M')
+                    file_time = local_time.strftime('%Y.%m.%d-%H.%M')
+                    base_name, file_extension = os.path.splitext(local_path_full)
+                    new_file_name = f"{base_name}_{file_time}{file_extension}"
+
+                    shutil.copy(local_path_full, os.path.join(local_backup_dir, new_file_name))
+                    logger.info(f"Бэкап файла '{local_path_full}' создан с именем '{new_file_name}'.")
                 else:
-                    resp = ftp.sendcmd(f'MDTM {remote_path}')
-                    remote_time = datetime.strptime(resp[4:], "%Y%m%d%H%M%S")
-                    local_time = datetime.fromtimestamp(os.path.getmtime(local_path)).replace(microsecond=0)
+                    logger.info(f'Обновление для файла: {local_path_full} - не требуется.')
+                    continue
 
-                    if local_time < remote_time:
-                        current_time = datetime.now().strftime('%Y.%m.%d-%H.%M')
-                        base_name, file_extension = os.path.splitext(local_path)
-                        new_file_name = f"{base_name}_{current_time}{file_extension}"
-
-                        shutil.copy(local_path, os.path.join(local_backup_dir, new_file_name))
-                        logger.info(f"Бэкап файла '{local_path}' создан с именем '{new_file_name}'.")
-                        is_copy = True
-                    else:
-                        logger.info(f'Обновление для файла: {local_path} - не требуется.')
-
-                if is_copy:
-                    logger.info('Проверяем наличие файла на FTP:')
-                    copy_file_from_ftp(ftp, remote_path, local_path)
+                logger.info('Проверяем наличие файла на FTP:')
+                copy_file_from_ftp(ftp, remote_path_full, local_path_full)
 
     except all_errors as e:
         logger.error(f'Ошибка FTP: {e}')
